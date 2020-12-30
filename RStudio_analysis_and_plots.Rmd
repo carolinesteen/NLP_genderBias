@@ -1,0 +1,236 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+###------Libraries-----####
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+library(stringr)
+library(data.table)
+library(ggplot2)
+library(RColorBrewer)
+```
+
+###------ Loading in the scraped data  -----####
+```{r}
+setwd('/Users/carolinetvergaard/Desktop/NLP/scraping/new')
+files <- list.files(path = "/Users/carolinetvergaard/Desktop/NLP/scraping/new", pattern = "*.csv", full.names = T)
+tblnew <- sapply(files, read_csv, simplify=FALSE) %>% 
+  bind_rows()
+
+tblnew <- tblnew[!(tblnew$Description=="None"),]
+tblnew <- tblnew %>% distinct()
+```
+
+###------ Import dataset after gender bias analysis in python notebook -----####
+```{r}
+df_tags <- read_csv("df_tags27dec.csv")
+df_salary <- read_csv("df_salary27dec.csv")
+df_seek_30 <- read_csv("Desktop/NLP/scraping/NEW_df_seek_30.csv")
+```
+
+###------ Fixing mistakes -----####
+just FYI der has been much more 'cleaning' and 'playing around' that you have been spared in this script :-) 
+```{r}
+indeed_occupation <- df_tags
+indeed_occupation$Sector[indeed_occupation$Sector == "Business & Finance"  | indeed_occupation$Sector == "Busuiness, Consulting & Management"] <- "Business, Consulting & Management"
+indeed_occupation$Sector[indeed_occupation$Occupation == "Pharmacist"] <- "Healthcare & Social Assistance"
+
+
+unique(indeed_occupation$Sector)
+
+DT <- indeed_occupation
+DT <- dplyr::filter(DT,  !is.na(Sector))
+indeed_occupation <- DT
+
+list <- list(unique(DT$Occupation))
+
+new_seek <- df_seek_30
+new_seek <- new_seek[!(new_seek$job_description=="nan"),]
+```
+
+###------ saving cleaned datasets -----####
+```{r}
+write_csv(new_seek, "DF_SEEK_CLEAN_BIAS.csv")
+write_csv(df_bias, "DF_INDEED_CLEAN_BIAS.csv")
+```
+
+###------ Density plots -----####
+```{r}
+ggplot(data=df_bias, aes(df_bias$man_woman)) + 
+  geom_histogram(aes(y =..density..),col="red", fill="green", alpha=.2) + 
+  geom_density(col=2)
+
+ggplot(data=new_seek, aes(new_seek$man_woman)) + 
+  geom_histogram(aes(y =..density..),col="red", fill="green", alpha=.2) + 
+  geom_density(col=2)
+```
+
+###------ Linear Regression Models -----####
+```{r}
+lm_occu <- lm(man_woman ~ Occupation, df_bias)
+summary(lm_occu)
+lm_occu <- lm(man_woman ~ Sector, df_bias)
+summary(lm_occu)
+lm_sec_30 <- lm(man_woman ~ category, df_seek_30)
+summary(lm_sec_30)
+```
+
+###------ Plots - Gender bias per occupation -----####
+```{r}
+ggplot(df_bias, aes(x= reorder(Occupation, -father_mother), y=father_mother, label=father_mother, fill=Sector)) +
+  geom_bar(stat='summary', width=.5)  +
+  scale_x_discrete(position = "top")+
+  coord_flip()+
+  scale_fill_manual(breaks = c("Construction", "Transport, Postal and Warehousing", "Manufacturing", "Professional, Scientific and Technical Services", "Business, Consulting & Management", "Accommodation & Food Services", "Retail Trade", "Creative Arts & Design",  "Education & Training", "Healthcare & Social Assistance"), 
+                       values=c("blue4", "blue3", "blue2", "blueviolet", "blue1", "cadetblue3", "chocolate", "coral3" ,"coral1" ,"brown1"))
+```
+
+###------ Plots - Gender bias Indeed per Sector -----####
+```{r}
+ggplot(df_bias, aes(x= reorder(Sector, -man_woman), y=man_woman, label=man_woman, fill=Sector)) +
+  geom_bar(stat='summary', width=.5)  +
+  scale_x_discrete(position = "top")+
+  coord_flip()+
+  scale_fill_manual(breaks = c("Construction", "Transport, Postal and Warehousing", "Manufacturing", "Professional, Scientific and Technical Services", "Business, Consulting & Management", "Accommodation & Food Services", "Retail Trade", "Creative Arts & Design",  "Education & Training", "Healthcare & Social Assistance"), 
+                       values=c("blue4", "blue3", "blue2", "blueviolet", "blue1", "cadetblue3", "chocolate", "coral3" ,"coral1" ,"brown1"))
+```
+###------ Plots - Gender bias SEEK per Sector/category -----####
+```{r}
+ggplot(new_seek, aes(x= reorder(category, -man_woman), y=man_woman, label=man_woman, fill=category)) +
+  geom_bar(stat='summary', width=.5)  +
+  scale_x_discrete(position = "top")+
+  scale_fill_discrete("Blues")+
+  coord_flip()
+```
+
+###------ Loading in gender bias dictonaries -----####
+```{r}
+gender_dict <- read_csv("Desktop/NLP/scraping/gender_bias_dict.csv")
+gender_dict1 <- gender_dict[!(gender_dict$'0'=="-1000"),]
+
+write.csv(gender_dict1, "gender_dict_clean.csv", sep=";")
+
+gender_dict_seek <- read_csv("seek_gender_bias_dict1.csv")
+gender_dict_seek1 <- gender_dict_seek[!(gender_dict_seek$'0'=="-1000"),]
+
+```
+
+```{r}
+write_csv(new_seek, "DF_SEEK_CLEAN_BIAS.csv")
+write_csv(df_bias, "DF_INDEED_CLEAN_BIAS.csv")
+```
+
+
+###------ Adding gender emplyment ratios (value = % of men in sector) -----####
+```{r}
+indeed_occupation <- df_bias
+unique(indeed_occupation$Sector)
+indeed_occupation$Ratio[indeed_occupation$Sector == "Construction"] <- 87
+indeed_occupation$Ratio[indeed_occupation$Sector == "Professional, Scientific and Technical Services"] <- 57
+indeed_occupation$Ratio[indeed_occupation$Sector == "Manufacturing"] <- 72
+indeed_occupation$Ratio[indeed_occupation$Sector == "Retail Trade"] <- 55
+indeed_occupation$Ratio[indeed_occupation$Sector == "Transport, Postal and Warehousing"] <- 80
+indeed_occupation$Ratio[indeed_occupation$Sector == "Accommodation & Food Services"] <- 46
+indeed_occupation$Ratio[indeed_occupation$Sector == "Healthcare & Social Assistance"] <- 22
+indeed_occupation$Ratio[indeed_occupation$Sector == "Education & Training"] <- 28
+indeed_occupation$Ratio[indeed_occupation$Sector == "Creative Arts & Design"] <- 50
+indeed_occupation$Ratio[indeed_occupation$Sector == "Business, Consulting & Management"] <- 61
+```
+
+
+###------ Merging subsets of Ratio, Bias and Salary to compare -----####
+```{r}
+salay_merge <- df_salary
+sal_na <- na.omit(salay_merge)
+table <- sal_na %>% 
+  group_by(Occupation) %>%
+  summarise(avg_salary = mean(salary_mean), na.rm = TRUE)
+
+table_bias <- df_bias %>% 
+  group_by(Occupation) %>%
+  summarise(avg_bias = mean(man_woman), na.rm = TRUE)
+
+table_ratio <- df_bias %>% 
+  group_by(Occupation, Sector) %>%
+  summarise(avg_ratio = mean(Ratio), na.rm = TRUE)
+
+full_table <- merge(table_ratio, table_bias, by.x="Occupation", by.y = "Occupation", all.x = T)
+full_table <- merge(full_table, table, by.x="Occupation", by.y = "Occupation", all.x = T)
+full_table <- na.omit(full_table)
+```
+###------ Plotting Bias against salary  -----####
+```{r}
+full_table %>% group_by(Occupation) %>% 
+  #summarise(mean.gender=mean(man_woman)) %>% 
+  ggplot(aes(avg_bias,avg_salary, color=Sector)) + 
+  geom_point()+
+  geom_text(aes(label=Occupation),hjust=0, vjust=0)+ 
+  scale_color_manual(breaks = c("Construction", "Transport, Postal and Warehousing", "Manufacturing", "Professional, Scientific and Technical Services", "Business, Consulting & Management", "Accommodation & Food Services", "Retail Trade", "Creative Arts & Design",  "Education & Training", "Healthcare & Social Assistance"), values=c("blue4", "blue3", "blue2", "blueviolet", "blue1", "cadetblue3", "chocolate", "coral3" ,"coral1" ,"brown1")) + 
+  theme_classic()
+```
+###------ Plotting Bias against Ratio  -----####
+```{r}
+indeed_occupation %>% group_by(Sector) %>% 
+  #summarise(mean.gender=mean(man_woman)) %>% 
+  ggplot(aes(mean_bias,Ratio, color=Sector)) + 
+  geom_point()+
+  geom_smooth(method = "lm")+
+  xlim(-0.007, 0.02)+
+  ylim(15, 95)+
+  geom_text(aes(label=Sector),hjust=0, vjust=0)+ 
+  labs(title="Indeed Data: Gender Bias / Gender Ratio - Plot")+
+  scale_color_manual(breaks = c("Construction", "Transport, Postal and Warehousing", "Manufacturing", "Professional, Scientific and Technical Services", "Business, Consulting & Management", "Accommodation & Food Services", "Retail Trade", "Creative Arts & Design",  "Education & Training", "Healthcare & Social Assistance"), values=c("blue4", "blue3", "blue2", "blueviolet", "blue1", "cadetblue3", "chocolate", "coral3" ,"coral1" ,"brown1")) + 
+  theme_classic()
+```
+###------ calculating peasons correlation of bias and ratio  -----####
+```{r}
+cor(df_bias$mean_bias, df_bias$Ratio, method = c("pearson"))
+cor.test(df_bias$Ratio, df_bias$mean_bias, method=c("pearson"))
+#the mean gender bias is associated with the gender ratio of employment with a Pearson's coefficient P=0.92, p=<.001
+```
+
+###------ deviding data into female and male bias + transforming female to absolute values to compare means   -----####
+```{r}
+#sorry for variable neme, got frustrated 
+df_bias$fuck[df_bias$man_woman <= 0] <- "female"
+df_bias$fuck[df_bias$man_woman >= 0] <- "male"
+
+df_bias$biases <- "male"
+df_bias$biases[df_bias$Sector == "Healthcare & Social Assistance" | df_bias$Sector == "Education & Training"] <- "female"
+
+df_bias$absolute <- abs(df_bias$man_woman)
+
+mean(df_bias$absolute[df_bias$fuck == "female"])
+mean(df_bias$absolute[df_bias$fuck == "male"])
+sd(df_bias$absolute[df_bias$fuck == "female"])
+sd(df_bias$absolute[df_bias$fuck == "male"])
+
+df.summary <- df_bias %>%
+  group_by(fuck) %>%
+  summarise(
+    sd = sd(absolute, na.rm = TRUE),
+    len = mean(absolute)
+  )
+df.summary
+
+ggplot(df.summary, aes(x = fuck, y = len, ymin = len-sd, ymax = len+sd))+
+  geom_errorbar(width = 0.2)
+
+t.test(df_bias$absolute[df_bias$fuck == "male"], df_bias$absolute[df_bias$fuck == "female"])
+```
+
+#### ----- wordcloud subsets ----- #####
+```{r}
+subset_male_bias <- subset(df_bias, fuck=="male")
+subset_female_bias <- subset(df_bias, fuck=="female")
+
+subset_des_fem <- select(subset_female_bias, Description)
+subset_des_male <- select(subset_female_bias, Description)
+
+write_csv(subset_des_fem, "sub_fem.csv")
+write_csv(subset_des_male, "sub_man.csv")
+```
